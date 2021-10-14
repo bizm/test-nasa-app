@@ -1,8 +1,8 @@
 # General information  
 This is an implementation of test assignment that was specified as:
 > Imagine a customer has asked you to build a tool that can show the following data on nearby asteroids using NASA’s APIs. The tool is required to do BOTH of the following things:
-• Show the asteroid that passed the closest to Earth between 19th December 2015 and 26th December 2015 and show its characteristics.
-• Show the largest asteroid (estimated diameter) during a user-selected year.
+> * Show the asteroid that passed the closest to Earth between 19th December 2015 and 26th December 2015 and show its characteristics.
+> * Show the largest asteroid (estimated diameter) during a user-selected year.
 
 App was implemented as Express/Node server and a simple React frontend. It is packed as docker image and is deployed via AWS Fargate.
 
