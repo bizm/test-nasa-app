@@ -1,0 +1,54 @@
+.App {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.App-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: .7em;
+  color: black;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+a {
+  text-decoration: none;
+  color: #333333;
+}
+a:hover {
+  color: #000000;
+  background-color: #ffffff;
+}
+
+.mode-selector > label {
+  display: block;
+  width: 100%;
+}
+.mode-selector > label > input[type=number] {
+  margin-left: .5em;
+  width: 3em;
+}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.display {
+  margin-top: 1em;
+  min-height: 10em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #f8f8f8;
+}
+.display > a {
+  font-size: 1.5em;
+  padding: 0 5px 3px 5px;
+}

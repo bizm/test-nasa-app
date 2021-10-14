@@ -1,0 +1,15 @@
+services:
+  app:
+    container_name: test-nasa-app
+    image: node:latest
+    build:
+     context: ..
+    env_file:
+      - .env
+    ports:
+      - 80:80
+      - 3001:3001
+    command: >
+      bash -c "
+      npm install supervisor -g
+      && parallel --lb ::: 'npm run --prefix client start' 'supervisor -i client src/server.js'"
