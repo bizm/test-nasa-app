@@ -1,0 +1,624 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Continuous Delivery Pipeline for test assignment NASA app"
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Default: bizm
+  GitHubRepository:
+    Type: String
+    Default: test-nasa-app
+  GitHubBranch:
+    Type: String
+    Default: master
+  ConnectionArn:
+    Description: ARN of CodeStarSourceConnection for GitHub (Developer Tools > Connections)
+    Type: String
+  NasaApiKeySecretArn:
+    Description: ARN of secret containing NAS API key
+    Type: String
+  VpcCIDR:
+    Type: String
+    Default: 10.192.0.0/24
+  Subnet1CIDR:
+    Type: String
+    Default: 10.192.0.0/28
+  Subnet2CIDR:
+    Type: String
+    Default: 10.192.0.16/28
+  Subnet3CIDR:
+    Type: String
+    Default: 10.192.0.32/28
+  Subnet4CIDR:
+    Type: String
+    Default: 10.192.0.64/28
+  Port:
+    Type: String
+    Default: 80
+
+Resources:
+
+  # ECR ########################################################################
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: test-nasa-app
+
+  ## VPC resources #############################################################
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: false
+      EnableDnsSupport: true
+      InstanceTenancy: default
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  Subnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref Subnet1CIDR
+      MapPublicIpOnLaunch: true
+
+  Subnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref Subnet2CIDR
+      MapPublicIpOnLaunch: true
+
+  Subnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      CidrBlock: !Ref Subnet3CIDR
+      MapPublicIpOnLaunch: true
+
+  Subnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref Subnet4CIDR
+      MapPublicIpOnLaunch: false
+
+  EIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIP.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref Subnet1
+
+  RouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  Subnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTableA
+      SubnetId: !Ref Subnet1
+
+  Subnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTableA
+      SubnetId: !Ref Subnet2
+
+  Subnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTableA
+      SubnetId: !Ref Subnet3
+
+  RouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  NatGatewayRoute:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway
+    Properties:
+      RouteTableId: !Ref RouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  Subnet4RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTableB
+      SubnetId: !Ref Subnet4
+
+  CodeBuildSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for test NASA app CodeBuild
+      GroupName: test-nasa-app-sg-cb
+      VpcId: !Ref VPC
+
+  EcsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for test NASA app ECS service
+      GroupName: test-nasa-app-sg-ecs
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref Port
+          ToPort: !Ref Port
+          CidrIp: !Ref VpcCIDR
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for test NASA app load balancer
+      GroupName: test-nasa-app-sg-alb
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - Description: HTTP
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  # CodeBuild ##################################################################
+  DockerBuildProject:
+    Type: AWS::CodeBuild::Project
+    DependsOn: ECRRepository
+    Properties:
+      Name: test-nasa-app-codebuild
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: aws/buildspec.yml
+      SourceVersion: main
+      ServiceRole: !GetAtt
+        - CodeBuildServiceRole
+        - Arn
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:4.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: AWS_ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: !Ref "AWS::AccountId"
+          - Name: ECR_REPOSITORY_URI
+            Type: PLAINTEXT
+            Value: !GetAtt ECRRepository.RepositoryUri
+      # https://cloudkatha.com/too-many-requests-you-reached-pull-rate-limit/
+      VpcConfig:
+        VpcId: !Ref VPC
+        Subnets:
+          - !Ref Subnet4
+        SecurityGroupIds:
+          - !Ref CodeBuildSecurityGroup
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: test-nasa-app-cb-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: test-nasa-app-cb-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                  - 'ec2:*'
+                  - 'ecr:*'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+
+  # S3 (Artifact store bucket) #################################################
+  CodePipelineArtifactStoreBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      # Make bucket name unique by adding stack id
+      BucketName: !Join
+        - "-"
+        - - !Sub test-nasa-app-pipeline-artifacts
+          - !Select
+            - 0
+            - !Split
+              - "-"
+              - !Select
+                - 2
+                - !Split
+                  - "/"
+                  - !Ref "AWS::StackId"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays: 1
+            Status: Enabled
+          - NoncurrentVersionExpirationInDays: 1
+            Status: Enabled
+    DeletionPolicy: Delete
+
+  CodePipelineArtifactStoreBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref CodePipelineArtifactStoreBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: DenyUnEncryptedObjectUploads
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:PutObject'
+            Resource: !Sub
+              - ${BucketArn}/*
+              - { BucketArn: !GetAtt CodePipelineArtifactStoreBucket.Arn }
+            Condition:
+              StringNotEquals:
+                's3:x-amz-server-side-encryption': 'aws:kms'
+          - Sid: DenyInsecureConnections
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: !Sub
+              - ${BucketArn}/*
+              - { BucketArn: !GetAtt CodePipelineArtifactStoreBucket.Arn }
+            Condition:
+              Bool:
+                'aws:SecureTransport': false
+
+  # CodePipeline ###############################################################
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    DependsOn:
+      - DockerBuildProject
+      - CodePipelineArtifactStoreBucket
+      - CodePipelineArtifactStoreBucketPolicy
+    Properties:
+      Name: test-nasa-app-pipeline
+      RoleArn: !GetAtt
+        - CodePipelineServiceRole
+        - Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref CodePipelineArtifactStoreBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: 1
+                Provider: CodeStarSourceConnection
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                ConnectionArn: !Ref ConnectionArn
+                FullRepositoryId: !Join [ "/", [ !Ref GitHubOwner, !Ref GitHubRepository ]]
+                BranchName: !Ref GitHubBranch
+                DetectChanges: true
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: DockerBuild
+              InputArtifacts:
+                - Name: SourceOutput
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref DockerBuildProject
+                PrimarySource: SourceOutput
+                EnvironmentVariables: !Sub
+                  - |
+                    [
+                      { "name": "ECR_REPOSITORY_URI", "value": "${ECRRepositoryURI}", "type": "PLAINTEXT" }
+                    ]
+                  - ECRRepositoryURI: !GetAtt ECRRepository.RepositoryUri
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: Deploy
+              InputArtifacts:
+                - Name: SourceOutput
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                Capabilities: CAPABILITY_IAM,CAPABILITY_NAMED_IAM
+                RoleArn: !GetAtt
+                  - CloudFormationServiceRole
+                  - Arn
+                StackName: test-nasa-app-deployment
+                TemplatePath: "SourceOutput::aws/deployment.yml"
+                ParameterOverrides: !Sub
+                  - |
+                    {
+                      "DockerImageURI": "${DockerImageURI}",
+                      "NasaApiKeySecretArn": "${NasaApiKeySecretArn}",
+                      "VpcId": "${VpcId}",
+                      "Subnet1": "${Subnet1}",
+                      "Subnet2": "${Subnet2}",
+                      "Subnet3": "${Subnet3}",
+                      "AlbSecurityGroup": "${AlbSecurityGroup}",
+                      "EcsSecurityGroup": "${EcsSecurityGroup}"
+                    }
+                  - DockerImageURI: !Join
+                      - ':'
+                      - - !GetAtt ECRRepository.RepositoryUri
+                        - 'latest'
+                    NasaApiKeySecretArn: !Ref NasaApiKeySecretArn
+                    VpcId: !Ref VPC
+                    Subnet1: !Ref Subnet1
+                    Subnet2: !Ref Subnet2
+                    Subnet3: !Ref Subnet3
+                    AlbSecurityGroup: !Ref AlbSecurityGroup
+                    EcsSecurityGroup: !Ref EcsSecurityGroup
+              RunOrder: 1
+
+  CodePipelineServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: test-nasa-app-pipeline-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+                - cloudformation.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: test-nasa-app-pipeline-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'iam:GetRole'
+                  - 'iam:PassRole'
+                  - 'iam:DetachRolePolicy'
+                  - 'iam:DeleteRole'
+                  - 'iam:CreateRole'
+                  - 'iam:AttachRolePolicy'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'codebuild:BatchGetBuilds'
+                  - 'codebuild:StartBuild'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'cloudwatch:*'
+                  - 's3:*'
+                  - 'cloudformation:*'
+                  - 'ec2:*'
+                  - 'ecs:*'
+                  - 'autoscaling:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'codestar-connections:UseConnection'
+                Resource: !Ref ConnectionArn
+                Condition:
+                  ForAllValues:StringEquals:
+                    codestar-connections:FullRepositoryId: !Join [ "/", [ !Ref GitHubOwner, !Ref GitHubRepository ]]
+
+  CloudFormationServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: test-nasa-app-cf-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cloudformation.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: test-nasa-app-cf-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'codedeploy:CreateDeployment'
+                  - 'codedeploy:GetApplicationRevision'
+                  - 'codedeploy:GetDeployment'
+                  - 'codedeploy:GetDeploymentConfig'
+                  - 'codedeploy:RegisterApplicationRevision'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'codebuild:BatchGetBuilds'
+                  - 'codebuild:StartBuild'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'iam:AttachRolePolicy'
+                  - 'iam:CreateRole'
+                  - 'iam:DetachRolePolicy'
+                  - 'iam:DeleteRole'
+                  - 'iam:DeleteRolePolicy'
+                  - 'iam:GetRole'
+                  - 'iam:GetRolePolicy'
+                  - 'iam:PassRole'
+                  - 'iam:PutRolePolicy'
+                  - 'iam:TagRole'
+                  - 'iam:UntagRole'
+                  - 'iam:UpdateAssumeRolePolicy'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'iam:CreateServiceLinkedRole'
+                  - 'iam:PutRolePolicy'
+                  - 'iam:UpdateRoleDescription'
+                  - 'iam:GetServiceLinkedRoleDeletionStatus'
+                  - 'iam:DeleteServiceLinkedRole'
+                Resource: 'arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS*'
+                Condition:
+                  StringLike:
+                    'iam:AWSServiceName': 'ecs.amazonaws.com'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:DeleteLogGroup'
+                  - 'logs:DeleteLogStream'
+                  - 'logs:DescribeLogGroups'
+                  - 'logs:DescribeLogStreams'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'ec2:AssociateRouteTable'
+                  - 'ec2:AssociateSubnetCidrBlock'
+                  - 'ec2:AssociateVpcCidrBlock'
+                  - 'ec2:AttachInternetGateway'
+                  - 'ec2:AuthorizeSecurityGroupIngress'
+                  - 'ec2:CreateInternetGateway'
+                  - 'ec2:CreateRoute'
+                  - 'ec2:CreateRouteTable'
+                  - 'ec2:CreateSecurityGroup'
+                  - 'ec2:CreateSubnet'
+                  - 'ec2:CreateTags'
+                  - 'ec2:CreateVpc'
+                  - 'ec2:CreateVpcEndpoint'
+                  - 'ec2:DeleteInternetGateway'
+                  - 'ec2:DeleteRoute'
+                  - 'ec2:DeleteRouteTable'
+                  - 'ec2:DeleteSecurityGroup'
+                  - 'ec2:DeleteSubnet'
+                  - 'ec2:DeleteVpc'
+                  - 'ec2:DeleteVpcEndpoints'
+                  - 'ec2:DescribeAccountAttributes'
+                  - 'ec2:DescribeAvailabilityZones'
+                  - 'ec2:DescribeInternetGateways'
+                  - 'ec2:DescribeRouteTables'
+                  - 'ec2:DescribeSecurityGroups'
+                  - 'ec2:DescribeSubnets'
+                  - 'ec2:DescribeVpcs'
+                  - 'ec2:DescribeVpcEndpoints'
+                  - 'ec2:DescribeVpcEndpointServices'
+                  - 'ec2:DetachInternetGateway'
+                  - 'ec2:DisassociateRouteTable'
+                  - 'ec2:DisassociateSubnetCidrBlock'
+                  - 'ec2:DisassociateVpcCidrBlock'
+                  - 'ec2:ModifySubnetAttribute'
+                  - 'ec2:ModifyVpcAttribute'
+                  - 'ec2:ModifyVpcEndpoint'
+                  - 'ec2:RevokeSecurityGroupIngress'
+                  - 'ec2:UpdateSecurityGroupRuleDescriptionsIngress'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:AddTags'
+                  - 'elasticloadbalancing:CreateListener'
+                  - 'elasticloadbalancing:CreateLoadBalancer'
+                  - 'elasticloadbalancing:CreateTargetGroup'
+                  - 'elasticloadbalancing:DeleteListener'
+                  - 'elasticloadbalancing:DeleteLoadBalancer'
+                  - 'elasticloadbalancing:DeleteTargetGroup'
+                  - 'elasticloadbalancing:DescribeListeners'
+                  - 'elasticloadbalancing:DescribeLoadBalancers'
+                  - 'elasticloadbalancing:DescribeTargetGroups'
+                  - 'elasticloadbalancing:ModifyListener'
+                  - 'elasticloadbalancing:ModifyLoadBalancerAttributes'
+                  - 'elasticloadbalancing:ModifyTargetGroup'
+                  - 'elasticloadbalancing:ModifyTargetGroupAttributes'
+                  - 'elasticloadbalancing:RemoveTags'
+                  - 'elasticloadbalancing:SetSecurityGroups'
+                  - 'elasticloadbalancing:SetSubnets'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'ecs:CreateCluster'
+                  - 'ecs:CreateService'
+                  - 'ecs:DeleteCluster'
+                  - 'ecs:DeleteService'
+                  - 'ecs:DeregisterTaskDefinition'
+                  - 'ecs:DescribeClusters'
+                  - 'ecs:DescribeServices'
+                  - 'ecs:RegisterTaskDefinition'
+                  - 'ecs:TagResource'
+                  - 'ecs:UntagResource'
+                  - 'ecs:UpdateService'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'cloudformation:*'
+                  - 'cloudwatch:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                Resource: !Sub
+                  - ${BucketArn}/*
+                  - { BucketArn: !GetAtt CodePipelineArtifactStoreBucket.Arn }
+              # - Effect: Allow
+              #   Action:
+              #     - 'ssm:GetParameter'
+              #     - 'ssm:GetParameters'
+              #   Resource:
+              #     - !Sub
+              #       - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NlbHost}
+              #       - NlbHost: !FindInMap [EnvironmentNames, !Ref "Environment", NlbHostSSMParameter]
+              #     - !Sub
+              #       - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VpcLinkId}
+              #       - VpcLinkId: !FindInMap [EnvironmentNames, !Ref "Environment", VpcLinkIdSSMParameter]

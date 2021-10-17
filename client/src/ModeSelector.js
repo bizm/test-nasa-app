@@ -39,6 +39,11 @@ class ModeSelector extends Component {
     this.props.parentCallback(data);
   }
 
+  clear() {
+    console.log("clearing it");
+    this.setState({ mode: undefined });
+  }
+
   render() {
     return (
       <div className="mode-selector">Choose an option below to show

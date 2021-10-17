@@ -52,3 +52,15 @@ input[type=number]::-webkit-outer-spin-button {
   font-size: 1.5em;
   padding: 0 5px 3px 5px;
 }
+.display > .loader::after {
+  animation: dots 2s linear infinite;
+  content: '';
+  display: inline-block;
+  width: 1em;
+}
+@keyframes dots {
+  0%, 20% { content: '.' }
+  40% { content: '..' }
+  60% { content: '...' }
+  90%, 100% { content: '' }
+}

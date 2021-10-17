@@ -44,10 +44,10 @@ app.get('/api/:startDate/:endDate', (req, res) => {
   const year = startDate.getFullYear();
   withNeoData(year, (err, result) => {
     if (err) {
-      return res.status(500).send();
+      return res.status(500).send({ message: "Internal server error"});
     }
     if (result === null) {
-      return res.status(202).send();
+      return res.status(202).send({});
     }
     res.send(result.closest);
   });
@@ -61,10 +61,10 @@ app.get('/api/:year', (req, res) => {
   const year = Number(req.params.year);
   withNeoData(year, (err, result) => {
     if (err) {
-      return res.status(500).send();
+      return res.status(500).send({ message: "Internal server error"});
     }
     if (result === null) {
-      return res.status(202).send();
+      return res.status(202).send({});
     }
     res.send(result.biggest);
   });
@@ -72,13 +72,18 @@ app.get('/api/:year', (req, res) => {
 
 
 function withNeoData(year, callback) {
-  if (NEO_DATA.hasOwnProperty(year)) {
-    return callback(null, NEO_DATA[year]);
+  callback(null, NEO_DATA[year] || null);
+  // if (NEO_DATA.hasOwnProperty(year)) {
+  //   return callback(null, NEO_DATA[year]);
+  // }
+  // NEO_DATA[year] = null;
+  if (!NEO_DATA.hasOwnProperty(year)) {
+    NEO_DATA[year] = null;
+    fetchNeoData(year);
   }
-  NEO_DATA[year] = null;
-  fetchNeoData(year)
-    .then(result => callback(null, result))
-    .catch(err => callback(err));
+  // fetchNeoData(year)
+  //   .then(result => callback(null, result))
+  //   .catch(err => callback(err));
 }
 function fetchNeoData(year) {
   NEO_DATA[year] = null;
@@ -97,7 +102,7 @@ function fetchNeoData(year) {
       return Promise.resolve(neoData);
     })
     .catch(err => {
-      console.error(err);
+      console.error(err.response);
       delete NEO_DATA[year];
       return Promise.reject(err);
     });

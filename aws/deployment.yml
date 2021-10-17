@@ -1,0 +1,296 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Cloudformation test for node-server demo app"
+
+Parameters:
+  DockerImageURI:
+    Type: String
+  NasaApiKeySecretArn:
+    Description: ARN of secret containing NAS API key
+    Type: String
+  # VpcCIDR:
+  #   Type: String
+  #   Default: 10.192.0.0/24
+  # Subnet1CIDR:
+  #   Type: String
+  #   Default: 10.192.0.0/28
+  # Subnet2CIDR:
+  #   Type: String
+  #   Default: 10.192.0.16/28
+  # Subnet3CIDR:
+  #   Type: String
+  #   Default: 10.192.0.32/28
+  Port:
+    Type: String
+    Default: 80
+  VpcId:
+    Type: String
+  Subnet1:
+    Type: String
+  Subnet2:
+    Type: String
+  Subnet3:
+    Type: String
+  AlbSecurityGroup:
+    Type: String
+  EcsSecurityGroup:
+    Type: String
+
+Resources:
+  # ## VPC resources #############################################################
+  # VPC:
+  #   Type: AWS::EC2::VPC
+  #   Properties:
+  #     CidrBlock: !Ref VpcCIDR
+  #     EnableDnsHostnames: false
+  #     EnableDnsSupport: true
+  #     InstanceTenance: default
+  #
+  # InternetGateway:
+  #   Type: AWS::EC2::InternetGateway
+  #
+  # InternetGatewayAttachment:
+  #   Type: AWS::EC2::VPCGatewayAttachment
+  #   Properties:
+  #     InternetGatewayId: !Ref InternetGateway
+  #     VpcId: !Ref VPC
+  #
+  # Subnet1:
+  #   Type: AWS::EC2::Subnet
+  #   Properties:
+  #     VpcId: !Ref VPC
+  #     AvailabilityZone: !Select [ 0, !GetAZs '' ]
+  #     CidrBlock: !Ref Subnet1CIDR
+  #     MapPublicIpOnLaunch: true
+  #
+  # Subnet2:
+  #   Type: AWS::EC2::Subnet
+  #   Properties:
+  #     VpcId: !Ref VPC
+  #     AvailabilityZone: !Select [ 0, !GetAZs '' ]
+  #     CidrBlock: !Ref Subnet2CIDR
+  #     MapPublicIpOnLaunch: true
+  #
+  # Subnet3:
+  #   Type: AWS::EC2::Subnet
+  #   Properties:
+  #     VpcId: !Ref VPC
+  #     AvailabilityZone: !Select [ 0, !GetAZs '' ]
+  #     CidrBlock: !Ref Subnet3CIDR
+  #     MapPublicIpOnLaunch: true
+  #
+  # RouteTable:
+  #   Type: AWS::EC2::RouteTable
+  #   Properties:
+  #     VpcId: !Ref VPC
+  #
+  # PublicRoute:
+  #   Type: AWS::EC2::Route
+  #   DependsOn: InternetGatewayAttachment
+  #   Properties:
+  #     RouteTableId: !Ref RouteTable
+  #     DestinationCidrBlock: 0.0.0.0/0
+  #     GatewayId: !Ref InternetGateway
+  #
+  # Subnet1RouteTableAssociation:
+  #   Type: AWS::EC2::SubnetRouteTableAssociation
+  #   Properties:
+  #     RouteTableId: !Ref RouteTable
+  #     SubnetId: !Ref Subnet1
+  #
+  # Subnet2RouteTableAssociation:
+  #   Type: AWS::EC2::SubnetRouteTableAssociation
+  #   Properties:
+  #     RouteTableId: !Ref RouteTable
+  #     SubnetId: !Ref Subnet2
+  #
+  # Subnet3RouteTableAssociation:
+  #   Type: AWS::EC2::SubnetRouteTableAssociation
+  #   Properties:
+  #     RouteTableId: !Ref RouteTable
+  #     SubnetId: !Ref Subnet3
+  #
+  # EcsSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     GroupDescription: Security group for test NASA app
+  #     GroupName: test-nasa-app-sg-ecs
+  #     VpcId: !Ref VPC
+  #     SecurityGroupIngress:
+  #       - IpProtocol: tcp
+  #         FromPort: !Ref Port
+  #         ToPort: !Ref Port
+  #         CidrIp: !Ref VpcCIDR
+  #
+  # AlbSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     GroupDescription: Security group for test NASA app load balancer
+  #     GroupName: test-nasa-app-sg-alb
+  #     VpcId: !Ref VPC
+  #     SecurityGroupIngress:
+  #       - Description: HTTP
+  #         IpProtocol: tcp
+  #         FromPort: 80
+  #         ToPort: 80
+  #         CidrIp: 0.0.0.0/0
+
+  # ELB resources ##############################################################
+  PublicLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: test-nasa-app-alb
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '30'
+      Subnets:
+        - !Ref Subnet1
+        - !Ref Subnet2
+        - !Ref Subnet3
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: !Ref Port
+      TargetType: ip
+      Name: test-nasa-app-target-group
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      UnhealthyThresholdCount: 2
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 30
+
+  ListenerHTTP:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref PublicLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  # ECS resources ##############################################################
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: test-nasa-app-cluster
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: test-nasa-app-task-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: test-nasa-app-task-execution-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: test-nasa-app-task-execution-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ecr:GetAuthorizationToken'
+                  - 'ecr:BatchCheckLayerAvailability'
+                  - 'ecr:GetDownloadUrlForLayer'
+                  - 'ecr:BatchGetImage'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:GetSecretValue'
+                Resource:
+                  - !Ref NasaApiKeySecretArn
+
+  TaskLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: test-nasa-app-log-group
+
+  TaskLogStream:
+    Type: AWS::Logs::LogStream
+    Properties:
+      LogGroupName: !Ref TaskLogGroup
+      LogStreamName: test-nasa-app-log-stream
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: test-nasa-app
+      Cpu: 256
+      Memory: 1024
+      NetworkMode: awsvpc
+      ContainerDefinitions:
+        - Name: test-nasa-app
+          Image: !Ref DockerImageURI
+          Cpu: 256
+          Memory: 1024
+          PortMappings:
+            - ContainerPort: !Ref Port
+              HostPort: !Ref Port
+              Protocol: tcp
+          Secrets:
+            - Name: NASA_API_KEY
+              ValueFrom: !Ref NasaApiKeySecretArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref TaskLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Ref TaskLogStream
+      RequiresCompatibilities:
+        - FARGATE
+      TaskRoleArn: !Ref TaskRole
+      ExecutionRoleArn: !Ref TaskExecutionRole
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: ListenerHTTP
+    Properties:
+      ServiceName: test-nasa-app-service
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+          - !Ref EcsSecurityGroup
+          Subnets:
+            - !Ref Subnet1
+            - !Ref Subnet2
+            - !Ref Subnet3
+      LoadBalancers:
+        - ContainerName: test-nasa-app
+          ContainerPort: !Ref Port
+          TargetGroupArn: !Ref TargetGroup

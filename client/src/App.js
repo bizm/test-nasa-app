@@ -12,15 +12,26 @@ class App extends Component {
   constructor(props) {
     super(props);
     this.state = {};
+    this.modeSelector = React.createRef();
   }
 
   handleModeChange = (data) => {
+    // if (this.timeoutIdApi) {
+    //   this.timeoutIdApi = clearTimeout(this.timeoutIdApi);
+    // }
+    // this.timeoutIdApi = setTimeout(() => {
+    //   this.callAPI(data);
+    // }, Constants.TIMEOUT_UI_RESPONSE_DELAY);
+    this.scheduleAPICall(data, Constants.TIMEOUT_UI_RESPONSE_DELAY);
+  }
+
+  scheduleAPICall = (data, timeout) => {
     if (this.timeoutIdApi) {
       this.timeoutIdApi = clearTimeout(this.timeoutIdApi);
     }
     this.timeoutIdApi = setTimeout(() => {
       this.callAPI(data);
-    }, Constants.TIMEOUT_API_CALL);
+    }, timeout);
   }
 
   callAPI = (data) => {
@@ -31,21 +42,14 @@ class App extends Component {
     });
     API.fetch(data.mode, data.year)
       .then(response => {
-        const displayData = {
-          name: response.name,
-          url: response.nasa_jpl_url
-        };
-        if (data.mode === Constants.MODE_DECEMBER_2015) {
-          displayData.approachDistance = response.close_approach_data[0].miss_distance.kilometers;
-          displayData.approachDate = response.close_approach_data[0].close_approach_date;
+        // not a nice way to handle it, but for now we treat null as a 202 response from API
+        if (response === null) {
+          return this.scheduleAPICall(data, Constants.TIMEOUT_RETRY);
         }
-        if (data.mode === Constants.MODE_SELECTED_YEAR) {
-          displayData.diameterMin = response.estimated_diameter.meters.estimated_diameter_min;
-          displayData.diameterMax = response.estimated_diameter.meters.estimated_diameter_max;
-        }
+
         this.setState({
           loading: false,
-          data: displayData
+          data: this.makeDisplayData(data.mode, response)
         });
       })
       .catch(err => {
@@ -54,8 +58,25 @@ class App extends Component {
           data: null,
           mode: null
         });
+        this.modeSelector.current.clear();
         console.error(err);
       });
+  }
+
+  makeDisplayData(mode, response) {
+    const displayData = {
+      name: response.name,
+      url: response.nasa_jpl_url
+    };
+    if (mode === Constants.MODE_DECEMBER_2015) {
+      displayData.approachDistance = response.close_approach_data[0].miss_distance.kilometers;
+      displayData.approachDate = response.close_approach_data[0].close_approach_date;
+    }
+    if (mode === Constants.MODE_SELECTED_YEAR) {
+      displayData.diameterMin = response.estimated_diameter.meters.estimated_diameter_min;
+      displayData.diameterMax = response.estimated_diameter.meters.estimated_diameter_max;
+    }
+    return displayData;
   }
 
   render() {
@@ -64,7 +85,7 @@ class App extends Component {
         <header className="App-header">
           <h1 className="App-title">Test assignment for New Things Co | Valentyn Derkach</h1>
         </header>
-        <ModeSelector parentCallback={this.handleModeChange} />
+        <ModeSelector parentCallback={this.handleModeChange} ref={this.modeSelector} />
         <Display loading={this.state.loading} data={this.state.data} />
       </div>
     );

@@ -2,9 +2,8 @@
 version: 0.2
 env:
   variables:
-    AWS_ACCOUNT_ID: ''
     ECR_REPOSITORY_URI: ''
-phase:
+phases:
   install:
     # TODO: figure out if docker runtime docker runtime is still required. It is not in aws docs anymore.
     # runtime-versions:
@@ -14,22 +13,29 @@ phase:
       - timeout 15 sh -c "until docker info; do echo.; sleep1; done"
   pre_build:
     commands:
-      - "ECR_REPOSITORY_NAME=$(echo $ECR_REPOSITORY_URI | cut -d: -f6 | cut -d/ -f2-)"
+      - echo $ECR_REPOSITORY_URI
+      - "ECR_REPOSITORY_REGISTRY_ID=$(echo $ECR_REPOSITORY_URI | cut -d. -f1)"
+      - echo $ECR_REPOSITORY_REGISTRY_ID
+      - "ECR_REPOSITORY_SERVER=$(echo $ECR_REPOSITORY_URI | cut -d/ -f1)"
+      - echo $ECR_REPOSITORY_SERVER
+      - "ECR_REPOSITORY_REGION=$(echo $ECR_REPOSITORY_URI | cut -d. -f4)"
+      - echo $ECR_REPOSITORY_REGION
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $ECR_REPOSITORY_REGION | docker login --username AWS --password-stdin $ECR_REPOSITORY_SERVER
+      - "ECR_REPOSITORY_NAME=$(echo $ECR_REPOSITORY_URI | cut -d/ -f2-)"
       - DOCKER_IMAGE_NAME=$ECR_REPOSITORY_NAME
       # TODO: do we actually need this PROJECT_VERSION?
       - PROJECT_VERSION=0.0.1
       # TODO: figure out how to get project version
       #- PROJECT_VERSION=$(grep -oPm1 "(?<=<version>)[^<]+" pom.xml)
-      - echo Logging in to Amazon ECR...
-      - $(aws ecr get-login --no-include-email --region $AWS_REGION --registry-ids $AWS_ACCOUNT_ID)
+      # - echo Logging in to Amazon ECR...
+      # - $(aws ecr get-login --no-include-email --region $AWS_REGION --registry-ids $ECR_REPOSITORY_REGISTRY_ID)
   build:
     commands:
-      - "echo Build started on `date`"
-      - "echo Building node package..."
-      - "echo Building the Docker image..."
-      - "docker build -t $DOCKER_IMAGE_NAME"
+      - echo Build started on `date`
+      - echo Building Docker image...
+      - docker build -t $DOCKER_IMAGE_NAME .
       - docker tag $DOCKER_IMAGE_NAME $ECR_REPOSITORY_URI:latest
-      - docker push $ECR_REPOSITORY_URI:latest
   post_build:
     commands:
-      - docker push $ECR_REPOSITORY_URI:$DOCKER_TAG
+      - docker push $ECR_REPOSITORY_URI:latest

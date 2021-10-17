@@ -4,7 +4,7 @@ const parallel = require('parallel-stream');
 const utils = require('./utils');
 
 const NEO_FEED_INTERVAL_IN_DAYS = 7;
-const HTTP_MAX_SIMULTANEOUS_REQUESTS = 20;
+const HTTP_MAX_SIMULTANEOUS_REQUESTS = 6;
 const NASA_API_KEY = process.env.NASA_API_KEY;
 
 // We'll debug only first and last two characters from NASA API key
@@ -39,10 +39,10 @@ exports.neo = async (year) => {
       (item, encoding, callback) => {
         neoFeed(item.startDate, item.endDate, (err, response) => {
           if (err) {
-            console.error(err);
+            console.error(err.response);
             return callback(new Error(
-              `NEO feed returned ${err.response.data.code} '${err.response.data.error_message}' ` +
-              `(${err.response.data.request})`
+              `NEO feed returned ${err.response.status} '${err.response.statusText}' ` +
+              `(${err.response.config.url})`
             ));
           }
           callback(null, response.near_earth_objects);
