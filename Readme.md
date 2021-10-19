@@ -31,8 +31,9 @@ This is a simple stupid implementation that is very far from being perfect. Here
     ```
 2. Run from [dev](/dev) directory
       ```shell
-      docker-compose build && docker-compose up
+      docker-compose -p nasa-test-app build && docker-compose -p nasa-test-app up
       ```
+    Now simply open `localhost:3001` in browser and play with it.
     In container output you'll see combined logs from react-scripts and server that we run via `supervisor`.
 
 3. Because of Windows directory mounting issues (yes, i'm using Windows) we don't mount anything. We just copy files into docker container when there any changes:
@@ -53,7 +54,7 @@ There are Cloudformation templates for deploying app on AWS Fargate. Here's how 
 1. Add your NASA API key as an AWS plaintext secret.
 2. Create a CodeStar connection and allow access to your github repo (we assume here you're using your own fork).
 3. Use [pipeline-vpc.yml](aws/pipeline-vpc.yml) template to create CodePipeline. You would need to specify ARN's of your NASA API key secret and CodeStart connection. Also you would need to change GitHub owner parameter. CloudFormation will create all the required resources and pipeline will be initiated.
-4. In case of success CodeDeploy will deploy your application. You would see a running task under Elastic Container Service. A line in its logs saying `Listening on port 80` is a good indication of it being up and running.
+4. In case of success CodeDeploy will deploy your application. You will see a deployment stack created. Follow its progress. Under ECS cluster you can check running task. A line in its logs saying `Listening on port 80` is a good indication of it being up and running.
 5. To try your app just find dns name of Application Load Balancer and open it in your browser.
 
 As you noticed pipeline template contains also VPC resources. Reason is that we need to overcome Docker limitation for poll quota and thus we use our VPC and subnet in CodeBuild. [Here](https://docs.aws.amazon.com/codebuild/latest/userguide/vpc-support.html) is more detailed explanation.

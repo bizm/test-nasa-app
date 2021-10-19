@@ -50,7 +50,7 @@ Resources:
       TargetType: ip
       Name: test-nasa-app-target-group
       HealthCheckIntervalSeconds: 6
-      HealthCheckPath: /
+      HealthCheckPath: /api/ping
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 5
       UnhealthyThresholdCount: 2

@@ -1,6 +1,7 @@
 const express = require('express');
 const utils = require('./utils');
 const neo = require('./neo');
+const path = require('path');
 
 // Starting date for the period for wich we find closest asteroid.
 const ACCEPTABLE_START_DATE = new Date(2015, 11, 19);
@@ -14,7 +15,7 @@ const app = express();
 /**
  * Serve static content.
  */
-app.use(express.static('client/build'));
+app.use(express.static(path.join(__dirname, '../../client/build')));
 /**
  * Ping endpoint.
  **/

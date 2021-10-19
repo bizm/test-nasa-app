@@ -11,5 +11,6 @@ services:
       - 3001:3001
     command: >
       bash -c "
-      npm install supervisor -g
-      && parallel --lb ::: 'npm run --prefix client start' 'supervisor -i client src/server.js'"
+      apt-get update && apt-get install parallel -y
+      && npm install supervisor -g
+      && parallel --lb ::: 'npm run --prefix client start' 'supervisor -i client server/src/server.js'"
