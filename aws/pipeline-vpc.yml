@@ -611,14 +611,3 @@ Resources:
                 Resource: !Sub
                   - ${BucketArn}/*
                   - { BucketArn: !GetAtt CodePipelineArtifactStoreBucket.Arn }
-              # - Effect: Allow
-              #   Action:
-              #     - 'ssm:GetParameter'
-              #     - 'ssm:GetParameters'
-              #   Resource:
-              #     - !Sub
-              #       - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NlbHost}
-              #       - NlbHost: !FindInMap [EnvironmentNames, !Ref "Environment", NlbHostSSMParameter]
-              #     - !Sub
-              #       - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VpcLinkId}
-              #       - VpcLinkId: !FindInMap [EnvironmentNames, !Ref "Environment", VpcLinkIdSSMParameter]

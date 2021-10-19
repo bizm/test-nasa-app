@@ -1,0 +1,134 @@
+openapi: 3.0.0
+info:
+  description: >-
+    OpenAPI documentation for test NASA app API.
+  version: 1.0.0
+  title: Test NASA app
+paths:
+  /api/ping:
+    get:
+      description: Ping endpoint
+      responses:
+        '200':
+          description: Successfull response
+  /api/{startDate}/{endDate}:
+    get:
+      description: Returns the closest NEO for the specified period.
+      parameters:
+        - in: path
+          name: startDate
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: path
+          name: endDate
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Successfull response
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/NEO'
+        '202':
+          description: Data fetching from NASA API is in progress.
+        '400':
+          description: Invalid request.
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error occured
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/ErrorResponse'
+  '/api/{year}':
+    get:
+      description: Returns the biggest NEO for the specified year.
+      parameters:
+        - in: path
+          name: year
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Successfull response
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/NEO'
+        '202':
+          description: Data fetching from NASA API is in progress.
+        '400':
+          description: Invalid request.
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error occured
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    NEO:
+      type: object
+      properties:
+        name:
+          type: string
+        nasa_jpl_url:
+          type: string
+        close_approach_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApproachData'
+        estimated_diameter:
+          $ref: '#/components/schemas/EstimatedDiameter'
+    ApproachData:
+      type: object
+      properties:
+        miss_distance:
+          $ref: '#/components/schemas/MissDistance'
+        close_approach_date:
+          type: string
+          format: date
+    MissDistance:
+      type: object
+      properties:
+        kilometers:
+          type: number
+          format: long
+    EstimatedDiameter:
+      type: object
+      properties:
+        meters:
+          $ref: '#/components/schemas/EstimatedDiameterValue'
+    EstimatedDiameterValue:
+      type: object
+      properties:
+        estimated_diameter_min:
+          type: number
+          format: long
+        estimated_diameter_max:
+          type: number
+          format: long
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string

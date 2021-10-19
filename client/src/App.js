@@ -16,12 +16,6 @@ class App extends Component {
   }
 
   handleModeChange = (data) => {
-    // if (this.timeoutIdApi) {
-    //   this.timeoutIdApi = clearTimeout(this.timeoutIdApi);
-    // }
-    // this.timeoutIdApi = setTimeout(() => {
-    //   this.callAPI(data);
-    // }, Constants.TIMEOUT_UI_RESPONSE_DELAY);
     this.scheduleAPICall(data, Constants.TIMEOUT_UI_RESPONSE_DELAY);
   }
 
